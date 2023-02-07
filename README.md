@@ -1,6 +1,6 @@
 # socks-router #
 
-A CLI app for routing SOCKS5 proxy connections dynamically through different upstream proxies. 
+A CLI app for routing SOCKS5 proxy connections dynamically through different upstream proxies.
 For now, the app reads and reloads a TOML config file to determine which upstream proxy to use.
 
 Soon there will be a REST API and a Web UI to change the upstream remotely.
@@ -10,7 +10,7 @@ Soon there will be a REST API and a Web UI to change the upstream remotely.
 If you have Rust installed, you can just run the following command
 
 ```sh
-cargo install socks-router
+RUSTFLAGS="--cfg tokio_unstable" cargo install socks-router
 ```
 
 ## Usage ##
@@ -30,7 +30,7 @@ Options:
 
 ## Configuration ##
 
-The configuration is a TOML file, placed at `./config.toml` by default. 
+The configuration is a TOML file, placed at `./config.toml` by default.
 For now it just contains a single upstream, which can be edited and will be used immediately for all new proxy requests.
 Open connections will be terminated if the upstream changes.
 
