@@ -1,5 +1,6 @@
 use std::{
     borrow::Borrow,
+    fmt::{self, write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
 };
 
@@ -215,12 +216,12 @@ impl Address {
     }
 }
 
-impl std::string::ToString for Address {
-    fn to_string(&self) -> String {
+impl fmt::Display for Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            Address::Domain(dom) => dom.as_ref().clone(),
-            Address::Ipv4(ipv4) => ipv4.to_string(),
-            Address::Ipv6(ipv6) => ipv6.to_string(),
+            Address::Domain(d) => write!(f, "{}", d.as_str()),
+            Address::Ipv4(ip) => write!(f, "{}", ip),
+            Address::Ipv6(ip) => write!(f, "{}", ip),
         }
     }
 }
