@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "A dynamic router for SOCKS5 proxy requests."
 repository = "https://github.com/riccz/socks-router"
 authors = ["Riccardo Zanol <hello@riccza.nl>"]
+license = "MIT"
 edition = "2021"
+exclude = ["/config.toml"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
