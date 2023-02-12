@@ -1,16 +1,12 @@
 use std::net::SocketAddr;
 use std::path::Path;
-use std::str::FromStr;
-use std::sync::RwLock;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use anyhow::{anyhow, Result};
-use clap::Parser;
-use lazy_static::lazy_static;
+use anyhow::{Context, Result};
 use notify::RecursiveMode;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tracing::{debug, info, Level};
+use tracing::{debug, info};
 use tracing_subscriber::{filter, FmtSubscriber};
 
 mod client;
@@ -21,13 +17,17 @@ mod server;
 mod utils;
 mod watcher;
 
-use crate::config::{DynConf, StaticConf};
+use config::{parse_args_and_read_config, DynConf, StaticConf};
 use server::{Server, SimpleAuthenticator, SimpleRouter};
+use utils::OnceRwLock;
 use watcher::AsyncWatcher;
+
+static STATIC_CONF: OnceRwLock<StaticConf> = OnceRwLock::new();
+static DYN_CONF: OnceRwLock<DynConf> = OnceRwLock::new();
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cli_args = StaticConf::parse();
+    STATIC_CONF.init(parse_args_and_read_config()?);
 
     console_subscriber::init();
     // // a builder for `FmtSubscriber`.
@@ -39,16 +39,20 @@ async fn main() -> Result<()> {
     //     .finish();
 
     // tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
-    // let conf_path = confy::get_configuration_file_path("socks_router", "config")?;
 
-    info!("Loading config from {:?}", cli_args.config_path);
-    let mut dynconf = DynConf::load(&cli_args.config_path)?;
+    // Read initial dynamic config
+    let dynconf_path = &STATIC_CONF.read().dyn_config_path;
+    info!(?dynconf_path, "Using dynamic config at {:?}", dynconf_path);
+    DYN_CONF.init(
+        DynConf::load().with_context(|| format!("Invalid dynamic config {:?}", dynconf_path))?,
+    );
 
-    let router = SimpleRouter::new(&dynconf.upstream_addr).await?;
+    // Setup the server
+    let router = SimpleRouter::new(&DYN_CONF.read().upstream_addr).await?;
     let authenticator = SimpleAuthenticator {};
-    let mut server = Server::new(&cli_args.listen_addr, router.clone(), authenticator).await?;
+    let mut server = Server::new(&STATIC_CONF.read().listen, router.clone(), authenticator).await?;
 
-    let (watcher_handle, mut watcher_rx) = run_watcher(&cli_args.config_path)?;
+    let (watcher_handle, mut watcher_rx) = run_watcher(dynconf_path)?;
 
     loop {
         tokio::select! {
@@ -59,9 +63,15 @@ async fn main() -> Result<()> {
             }
             res = watcher_rx.recv() => {
                 res.expect("Dropped the sender"); // This happens when the watcher task errors
+
                 // Reread the config
-                dynconf = DynConf::load(&cli_args.config_path)?;
-                router.write().await.replace_upstream(&dynconf.upstream_addr).await?;
+                let new_config = DynConf::load()?;
+                if new_config != *DYN_CONF.read() {
+                    *DYN_CONF.write()= new_config;
+                }
+
+                // Update the router
+                router.write().await.replace_upstream(&DYN_CONF.read().upstream_addr).await?;
 
                 // Notify new config to the server
                 server.notify_config_change();
