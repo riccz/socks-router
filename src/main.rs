@@ -1,5 +1,7 @@
+use std::iter::successors;
 use std::net::SocketAddr;
 use std::path::Path;
+use std::process::ExitCode;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -25,8 +27,25 @@ use watcher::AsyncWatcher;
 static STATIC_CONF: OnceRwLock<StaticConf> = OnceRwLock::new();
 static DYN_CONF: OnceRwLock<DynConf> = OnceRwLock::new();
 
+/// This is just to format the errors
+/// While letting the destructors run (close the sockets/files)
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> ExitCode {
+    match inner_main().await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("Error: {}\n", e);
+
+            for cause in successors(e.source(), |e| e.source()) {
+                eprintln!("Caused by: {}", cause);
+            }
+
+            ExitCode::FAILURE
+        }
+    }
+}
+
+async fn inner_main() -> Result<()> {
     STATIC_CONF.init(parse_args_and_read_config()?);
 
     console_subscriber::init();
