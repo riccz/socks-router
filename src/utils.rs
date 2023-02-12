@@ -1,4 +1,6 @@
 use std::io;
+use std::ops::{Deref, DerefMut};
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use tokio::io::{
     AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
@@ -99,6 +101,100 @@ pub async fn send_pkt<P: Packet, W: AsyncWrite + Unpin>(
         })
 }
 
+/// Lock type for read-biased `static` vars.
+///
+/// This implements an interface similar to `std::sync::RwLock`. The main
+/// differences are: it can only be initialized once, and it must be initialized
+/// before the first use.  It also doesn't deal at all with lock poisoning and
+/// panics instead.
+///
+/// The main use case for this type is to wrap values that need to be `static`
+/// and need to be writable (but rarely compared to the reads). The prime
+/// example of this is a struct of configuration settings that can change at
+/// runtime.
+///
+/// # Examples #
+///
+/// ```
+/// static LOCK: OnceRwLock<String> = OnceRwLock::new();
+///
+/// fn main() {
+///     LOCK.init("Hello".to_string());
+///
+///     // Use the value
+///     println!("{}", *LOCK.read());
+///
+///     // Change the value
+///     *LOCK.write() += " world!";
+///     assert_eq!(LOCK.read().as_str(), "Hello world!");
+/// }
+/// ```
+pub struct OnceRwLock<T> {
+    inner: RwLock<Option<T>>,
+}
+
+impl<T> OnceRwLock<T> {
+    /// Create a new empty OnceRwLock.
+    pub const fn new() -> Self {
+        Self {
+            inner: RwLock::new(None),
+        }
+    }
+
+    /// Put a value into the OnceRwLock
+    ///
+    /// This method will panic if it is called more than once.
+    pub fn init(&self, value: T) {
+        let mut guard = self.inner.write().unwrap();
+        if guard.is_some() {
+            panic!("Cannot call OnceRWLock::init more than once");
+        }
+        guard.replace(value);
+    }
+
+    /// Obtain a read guard to access the underlying data
+    pub fn read(&self) -> OnceRwLockReadGuard<T> {
+        let guard = self.inner.read().unwrap();
+        OnceRwLockReadGuard { inner: guard }
+    }
+
+    /// Obtain a write guard to access the underlying data
+    pub fn write(&self) -> OnceRwLockWriteGuard<T> {
+        let guard = self.inner.write().unwrap();
+        OnceRwLockWriteGuard { inner: guard }
+    }
+}
+
+pub struct OnceRwLockReadGuard<'a, T> {
+    inner: RwLockReadGuard<'a, Option<T>>,
+}
+
+impl<'a, T> Deref for OnceRwLockReadGuard<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner.deref().as_ref().unwrap()
+    }
+}
+
+pub struct OnceRwLockWriteGuard<'a, T> {
+    inner: RwLockWriteGuard<'a, Option<T>>,
+}
+
+impl<'a, T> Deref for OnceRwLockWriteGuard<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner.deref().as_ref().unwrap()
+    }
+}
+
+impl<'a, T> DerefMut for OnceRwLockWriteGuard<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.inner.deref_mut().as_mut().unwrap()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use tokio::io::{duplex, AsyncReadExt, BufStream};
@@ -106,6 +202,17 @@ mod tests {
     use super::*;
 
     use crate::pkts::AuthMethodProposal;
+
+    #[test]
+    fn test_static_once_rwlock() {
+        static LOCK: OnceRwLock<String> = OnceRwLock::new();
+
+        LOCK.init("Hello There!".to_string());
+        assert_eq!(LOCK.read().as_str(), "Hello There!");
+
+        *LOCK.write() = "Hola!".to_string();
+        assert_eq!(LOCK.read().as_str(), "Hola!");
+    }
 
     #[tokio::test]
     async fn test_send_pkt() {
