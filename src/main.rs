@@ -108,6 +108,10 @@ async fn inner_main() -> Result<()> {
 }
 
 /// Start the watcher task for the given path
+///
+/// When the file changes, the `mpsc::Receiver` returned by this function gets a
+/// new message.  The watcher runs forever, unless the task is cancelled via the
+/// returned `JoinHandle`.
 fn run_watcher<P: AsRef<Path>>(
     watch_path: P,
 ) -> Result<(JoinHandle<Result<()>>, mpsc::Receiver<()>)> {
