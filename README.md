@@ -10,7 +10,7 @@ Soon there will be a REST API and a Web UI to change the upstream remotely.
 If you have Rust installed, you can just run the following command
 
 ```sh
-RUSTFLAGS="--cfg tokio_unstable" cargo install socks-router
+cargo install socks-router
 ```
 
 ## Usage ##

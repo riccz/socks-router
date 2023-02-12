@@ -9,7 +9,7 @@ use notify::RecursiveMode;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{debug, info};
-use tracing_subscriber::{filter, FmtSubscriber};
+use tracing_subscriber::FmtSubscriber;
 
 mod client;
 mod config;
@@ -48,16 +48,13 @@ async fn main() -> ExitCode {
 async fn inner_main() -> Result<()> {
     STATIC_CONF.init(parse_args_and_read_config()?);
 
-    console_subscriber::init();
-    // // a builder for `FmtSubscriber`.
-    // let subscriber = FmtSubscriber::builder()
-    //     // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
-    //     // will be written to stdout.
-    //     .with_max_level(Level::TRACE)
-    //     // completes the builder.
-    //     .finish();
-
-    // tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    // Setup logging
+    let format = tracing_subscriber::fmt::format();
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(STATIC_CONF.read().log_level)
+        .event_format(format)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber)?;
 
     // Read initial dynamic config
     let dynconf_path = &STATIC_CONF.read().dyn_config_path;

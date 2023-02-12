@@ -1,3 +1,0 @@
-[build]
-# For tokio_console
-rustflags = ["--cfg", "tokio_unstable"]
