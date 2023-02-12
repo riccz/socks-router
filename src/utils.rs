@@ -8,11 +8,6 @@ use anyhow::{anyhow, Result};
 
 use crate::pkts::Packet;
 
-#[deprecated]
-pub async fn read_pkt<P: Packet, R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<P> {
-    recv_pkt(reader).await
-}
-
 /// Read a packet of the given type from the reader.
 /// This function keeps filling the reader's buffer until a full packet can be parsed or there is an error.
 /// The reader's buffer only gets consumed if the packet parsing is successful.

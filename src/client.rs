@@ -10,7 +10,7 @@ use anyhow::{anyhow, Result};
 use tokio::net::{TcpStream, ToSocketAddrs};
 
 use crate::pkts::{Address, AuthMethod, AuthMethodProposal, AuthMethodResponse, Reply, Request};
-use crate::utils::{read_pkt, send_pkt};
+use crate::utils::{recv_pkt, send_pkt};
 
 // Since I have the leftovers, I need to adapt the AsyncRead interface
 #[pin_project]
@@ -143,7 +143,7 @@ async fn negotiate_auth_method<R: AsyncBufRead + Unpin, W: AsyncWrite + Unpin>(
     let authmethod_proposal = AuthMethodProposal::from_slice(methods)?;
     send_pkt(&authmethod_proposal, writer).await?;
 
-    let auth_response: AuthMethodResponse = read_pkt(reader).await?;
+    let auth_response: AuthMethodResponse = recv_pkt(reader).await?;
     match auth_response.0 {
         Some(am) if methods.contains(&am) => Ok(am),
         Some(am) => Err(anyhow!(
@@ -167,7 +167,7 @@ async fn connect<R: AsyncBufRead + Unpin, W: AsyncWrite + Unpin, A: Borrow<Addre
     let request = Request::connect(addr.borrow().clone(), port);
     send_pkt(&request, writer).await?;
 
-    let reply: Reply = read_pkt(reader).await?;
+    let reply: Reply = recv_pkt(reader).await?;
     if !reply.is_success() {
         Err(anyhow!("Connect request failed: {:?}", reply.code))
     } else {
