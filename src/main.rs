@@ -6,9 +6,10 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use notify::RecursiveMode;
+use tokio::signal;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tracing::{debug, debug_span, info, info_span, trace, Instrument};
+use tracing::{debug, debug_span, error, info, info_span, trace, Instrument};
 use tracing_subscriber::FmtSubscriber;
 
 mod client;
@@ -72,8 +73,23 @@ async fn inner_main() -> Result<()> {
     let watcher_span = debug_span!("watcher", path = ?dynconf_path);
     let (watcher_handle, mut watcher_rx) = watcher_span.in_scope(|| run_watcher(dynconf_path))?;
 
+    // Listen for Ctrl-C
+    let ctrl_c_fut = signal::ctrl_c();
+    tokio::pin!(ctrl_c_fut);
+
     loop {
         tokio::select! {
+            res = &mut ctrl_c_fut => {
+                res?;
+                info!("Received Ctrl-C, shutting down");
+                // If Ctrl-C again quit immediately
+                tokio::spawn(async move {
+                    signal::ctrl_c().await.expect("Failed to listen for Ctrl-C");
+                    error!("Received Ctrl-C again, force quit now");
+                    std::process::exit(1);
+                });
+                break;
+            }
             res = server.run() => {
                 // Server shut down
                 res?;
