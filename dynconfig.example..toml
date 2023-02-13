@@ -1,0 +1,25 @@
+[default]
+upstream = "local_tor"
+drop_existing_connections = true
+
+[[upstreams]]
+name = "up1"
+endpoint = "up1.example.com:1080"
+
+[[upstreams]]
+name = "up2"
+endpoint = "up2.example.com:1080"
+
+[[upstreams]]
+name = "local_tor"
+endpoint = "127.0.0.1:9050"
+
+[[users]]
+name = "alice"
+pass = "alice_password"
+upstream = "up1"
+
+[[users]]
+name = "bob"
+pass = "bob_password"
+upstream = "up2"

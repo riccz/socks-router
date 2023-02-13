@@ -1,0 +1,8 @@
+# The address and port where the SOCKS5 server listens on
+listen = "[::]:1080"
+# The address and port where the API server listens on
+api_listen = "127.0.0.1:5000"
+# The path to the dynamic config file
+dyn_config_path = "dynconfig.toml"
+# The log level (can be "trace", "debug", "info", "warn", "error")
+log_level = "debug"

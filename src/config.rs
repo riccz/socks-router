@@ -128,10 +128,39 @@ pub struct StaticConf {
 /// Dynamic config.
 ///
 /// This is updated by the server when the settings are changed via the API.
+// FIXME: It's possible to confuse address:port with upstream names. Maybe use a
+// wrapper type to distinguish?
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct DynConf {
-    /// The upstream server and port
-    pub upstream_addr: String, // Just one for now
+    /// Base settings independent of the connected user
+    pub default: DynDefaultConf,
+    /// Known upstreams
+    pub upstreams: Vec<DynUpstreamConfig>,
+    /// Users
+    pub users: Vec<DynUserConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct DynDefaultConf {
+    /// The fallback default upstream name
+    pub upstream: String,
+    #[serde(default = "default_drop_existing_connections")]
+    pub drop_existing_connections: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct DynUpstreamConfig {
+    /// The name
+    pub name: String,
+    /// The upstream address and port
+    pub endpoint: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct DynUserConfig {
+    pub name: String,
+    pub pass: String,
+    pub upstream: Option<String>,
 }
 
 impl DynConf {
@@ -166,6 +195,11 @@ impl DynConf {
         let path = &crate::STATIC_CONF.read().dyn_config_path;
         self.save_to(path)
     }
+}
+
+/// Needed by serde default
+fn default_drop_existing_connections() -> bool {
+    true
 }
 
 /// Custom serde implementation for `tracing::Level`

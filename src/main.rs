@@ -4,13 +4,15 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use notify::RecursiveMode;
+use serde::{Deserialize, Serialize};
 use tokio::signal;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{debug, debug_span, error, info, info_span, trace, Instrument};
 use tracing_subscriber::FmtSubscriber;
+use warp::{filters, path, Filter};
 
 mod client;
 mod config;
@@ -65,13 +67,47 @@ async fn inner_main() -> Result<()> {
     );
 
     // Setup the server
-    let router = SimpleRouter::new(&DYN_CONF.read().upstream_addr).await?;
+    let router = SimpleRouter::new(get_default_upstream()?).await?;
     let authenticator = SimpleAuthenticator {};
     let mut server = Server::new(&STATIC_CONF.read().listen, router.clone(), authenticator).await?;
 
     // Setup the watcher task
     let watcher_span = debug_span!("watcher", path = ?dynconf_path);
     let (watcher_handle, mut watcher_rx) = watcher_span.in_scope(|| run_watcher(dynconf_path))?;
+
+    // warp task
+    let api_listen = STATIC_CONF.read().api_listen.clone();
+    let warp_span = debug_span!("warp", ?api_listen); // Redundant? Server::run already creates a span
+    let warp_handle = tokio::spawn(
+        async move {
+            let patch_default_settings_route = path!("default")
+                .and(filters::method::patch())
+                .and(filters::body::json())
+                .and_then(handle_patch_defaults);
+
+            let get_default_settings_route = path!("default")
+                .and(filters::method::get())
+                .map(|| warp::reply::json(&DYN_CONF.read().default));
+
+            let get_upstreams_route = path!("upstreams")
+                .and(filters::method::get())
+                .map(|| warp::reply::json(&DYN_CONF.read().upstreams)); // FIXME: everything, really?
+
+            let api_route = filters::path::path("api").and(
+                patch_default_settings_route
+                    .or(get_default_settings_route)
+                    .or(get_upstreams_route),
+            );
+
+            info!("Starting warp API server");
+            let server = warp::serve(api_route);
+            let sockaddr: SocketAddr = api_listen.parse()?;
+            server.run(sockaddr).await;
+
+            Result::<()>::Ok(())
+        }
+        .instrument(warp_span.clone()),
+    );
 
     // Listen for Ctrl-C
     let ctrl_c_fut = signal::ctrl_c();
@@ -105,13 +141,23 @@ async fn inner_main() -> Result<()> {
                 }
 
                 // Update the router
-                router.write().await.replace_upstream(&DYN_CONF.read().upstream_addr).await?;
+                router.write().await.replace_upstream(get_default_upstream()?).await?;
 
                 // Notify new config to the server
                 server.notify_config_change();
             }
         }
     }
+
+    // Shutdown warp
+    async {
+        warp_handle.abort();
+        if let Err(e) = warp_handle.await {
+            debug!(%e, "Stopped Warp");
+        }
+    }
+    .instrument(warp_span)
+    .await;
 
     // Shutdown the watcher
     async {
@@ -184,4 +230,54 @@ fn run_watcher<P: AsRef<Path>>(
         .in_current_span(),
     );
     Ok((handle, rx))
+}
+
+// Payload of PATCH /api/default
+#[derive(Debug, Serialize, Deserialize)]
+struct PatchDefaultPayload {
+    pub upstream: Option<String>,
+}
+
+async fn handle_patch_defaults(
+    payload: PatchDefaultPayload,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    if let Some(upstream) = payload.upstream {
+        debug!(?upstream, "Got an upstream PATCH request");
+
+        let mut guard = DYN_CONF.write();
+        if guard.default.upstream != upstream {
+            // Check that it actually exists
+            if guard
+                .upstreams
+                .iter()
+                .find(|u| u.name == upstream)
+                .is_none()
+            {
+                return Err(warp::reject()); // actually should be 400
+            }
+
+            guard.default.upstream = upstream;
+            if let Err(e) = guard.save() {
+                error!(%e, "Failed to write the dynamic conf file");
+                return Err(warp::reject()); // Actually should be 500
+            }
+        }
+    } else {
+        // Empty
+        return Err(warp::reject::reject()); // Actually should be a 400
+    }
+
+    // Default is empty OK
+    Ok(warp::reply::reply())
+}
+
+fn get_default_upstream() -> Result<String> {
+    let guard = DYN_CONF.read();
+    Ok(guard
+        .upstreams
+        .iter()
+        .find(|u| u.name == guard.default.upstream)
+        .ok_or(anyhow!("Invalid upstream: {:?}", guard.default.upstream))?
+        .endpoint
+        .clone())
 }
