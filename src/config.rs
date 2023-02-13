@@ -74,6 +74,9 @@ struct OptStaticConf {
     /// Path of the dynamic config
     #[arg(short, long, env = "SOCKS_ROUTER_DYN_CONFIG_PATH")]
     pub dyn_config_path: Option<PathBuf>,
+    /// Address and port for the API to listen on
+    #[arg(short, long, env = "SOCKS_ROUTER_API_LISTEN")]
+    pub api_listen: Option<String>,
 }
 
 impl Into<StaticConf> for OptStaticConf {
@@ -81,10 +84,12 @@ impl Into<StaticConf> for OptStaticConf {
         let listen = self.listen.unwrap_or("127.0.0.1:1080".into());
         let log_level = self.log_level.unwrap_or(tracing::Level::INFO);
         let dyn_config_path = self.dyn_config_path.unwrap_or("dynconfig.toml".into());
+        let api_listen = self.api_listen.unwrap_or("127.0.0.1:5000".into());
         StaticConf {
             listen,
             log_level,
             dyn_config_path,
+            api_listen,
         }
     }
 }
@@ -100,6 +105,9 @@ impl OptStaticConf {
         if self.dyn_config_path.is_none() {
             self.dyn_config_path = other.dyn_config_path;
         }
+        if self.api_listen.is_none() {
+            self.api_listen = other.api_listen;
+        }
         self
     }
 }
@@ -113,6 +121,8 @@ pub struct StaticConf {
     pub log_level: tracing::Level,
     /// Path of the dynamic config
     pub dyn_config_path: PathBuf,
+    /// Address and port for the API to listen on
+    pub api_listen: String,
 }
 
 /// Dynamic config.
