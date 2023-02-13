@@ -6,7 +6,7 @@ repository = "https://github.com/riccz/socks-router"
 authors = ["Riccardo Zanol <hello@riccza.nl>"]
 license = "MIT"
 edition = "2021"
-exclude = ["/config.toml"]
+exclude = ["/config.toml", "/dynconfig.toml"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
