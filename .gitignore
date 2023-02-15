@@ -1,3 +1,4 @@
+/.cargo-home/
 /config.toml
 /dynconfig.toml
 /target
