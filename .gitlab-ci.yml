@@ -6,8 +6,20 @@ stages:
 
 variables:
   PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/socks-router-linux-amd64/${CI_COMMIT_TAG}"
+  # Not `.cargo` because it can be used for crate-specific config
+  # This override is necessary for caching to work
+  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo-home"
 
 image: "rust:1-bullseye"
+
+cache: &global_cache
+  paths:
+    - target
+    - "${CARGO_HOME}/bin"
+    - "${CARGO_HOME}/registry/index"
+    - "${CARGO_HOME}/registry/cache"
+    - "${CARGO_HOME}/git/db"
+  unprotect: true
 
 build:
   stage: build
@@ -20,6 +32,9 @@ build:
 
 test:
   stage: test
+  cache:
+    <<: *global_cache
+    policy: pull
   script:
     - rustc --version && cargo --version
     - cargo test --release --verbose
@@ -29,6 +44,8 @@ upload:
   image: curlimages/curl:latest
   rules:
     - if: $CI_COMMIT_TAG
+  # Only needs the binary (artifact)
+  cache: []
   script:
     - |
       curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file target/release/socks-router "${PACKAGE_REGISTRY_URL}/socks-router"
@@ -37,7 +54,8 @@ release:
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   rules:
-    - if: $CI_COMMIT_TAG  
+    - if: $CI_COMMIT_TAG
+  cache: []
   script:
     - echo "release job"
   release:
@@ -51,7 +69,8 @@ release:
 publish:
   stage: release
   rules:
-    - if: $CI_COMMIT_TAG  
+    - if: $CI_COMMIT_TAG
+  cache: []
   script:
     - rustc --version && cargo --version
     # Ensure same version as the tag
