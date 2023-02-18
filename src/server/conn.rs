@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use anyhow::{anyhow, Result};
 use tokio::io::BufReader;
-use tokio::net::TcpStream;
+use tokio::net::{TcpSocket, TcpStream};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{debug, error, Instrument};
@@ -22,6 +22,8 @@ pub struct ConnManager<R: Router> {
     cfg_notify_tx: watch::Sender<()>,
     /// Need this to give copies to new connection tasks
     cfg_notify_rx: watch::Receiver<()>,
+    /// Device name to use for upstream sockets
+    upstream_device: Option<Vec<u8>>,
 }
 
 impl<R: Router> ConnManager<R> {
@@ -33,7 +35,12 @@ impl<R: Router> ConnManager<R> {
             router,
             cfg_notify_rx,
             cfg_notify_tx,
+            upstream_device: None,
         }
+    }
+
+    pub fn set_upstream_device(&mut self, value: Option<Vec<u8>>) {
+        self.upstream_device = value;
     }
 
     /// Handle a new connection.
@@ -44,6 +51,7 @@ impl<R: Router> ConnManager<R> {
 
         let router = self.router.clone();
         let cfg_notify_rx = self.cfg_notify_rx.clone();
+        let upstream_device = self.upstream_device.clone();
         self.tasks.spawn(
             (async move {
                 // choose auth method
@@ -78,6 +86,7 @@ impl<R: Router> ConnManager<R> {
                             target_port,
                             router,
                             cfg_notify_rx,
+                            upstream_device,
                         };
                         handler.run().await
                     }
@@ -165,6 +174,7 @@ struct ConnectHandler<R: Router> {
     target_addr: Address,
     target_port: u16,
     client_sockaddr: SocketAddr,
+    upstream_device: Option<Vec<u8>>,
 }
 
 impl<R: Router> ConnectHandler<R> {
@@ -228,7 +238,13 @@ impl<R: Router> ConnectHandler<R> {
             .await?;
 
         // Try to connect to upstream (forward the target address & port)
-        let upstream_tcpstream = TcpStream::connect(upstream_sockaddr).await?;
+        let tcp_socket = match upstream_sockaddr {
+            SocketAddr::V4(_) => TcpSocket::new_v4()?,
+            SocketAddr::V6(_) => TcpSocket::new_v6()?,
+        };
+        tcp_socket.bind_device(self.upstream_device.as_ref().map(Vec::as_slice))?;
+        let upstream_tcpstream = tcp_socket.connect(upstream_sockaddr).await?;
+
         let upstream_local_sockaddr = upstream_tcpstream.local_addr().unwrap();
         let upstream_client = make_client(
             upstream_tcpstream,

@@ -6,3 +6,5 @@ api_listen = "127.0.0.1:5000"
 dyn_config_path = "dynconfig.toml"
 # The log level (can be "trace", "debug", "info", "warn", "error")
 log_level = "debug"
+# The interface to use for connections to the upstream servers
+upstream_device = "vrf0"

@@ -70,6 +70,9 @@ async fn inner_main() -> Result<()> {
     let router = SimpleRouter::new(get_default_upstream()?).await?;
     let authenticator = SimpleAuthenticator {};
     let mut server = Server::new(&STATIC_CONF.read().listen, router.clone(), authenticator).await?;
+    if let Some(ud) = &STATIC_CONF.read().upstream_device {
+        server.set_upstream_device(Some(ud.as_bytes().to_owned()));
+    }
 
     // Setup the watcher task
     let watcher_span = debug_span!("watcher", path = ?dynconf_path);

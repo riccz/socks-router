@@ -77,6 +77,9 @@ struct OptStaticConf {
     /// Address and port for the API to listen on
     #[arg(short, long, env = "SOCKS_ROUTER_API_LISTEN")]
     pub api_listen: Option<String>,
+    /// Name of the interface to use for upstream sockets
+    #[arg(short = 'i', long, env = "SOCKS_ROUTER_UPSTREAM_DEVICE")]
+    pub upstream_device: Option<String>,
 }
 
 impl Into<StaticConf> for OptStaticConf {
@@ -85,11 +88,13 @@ impl Into<StaticConf> for OptStaticConf {
         let log_level = self.log_level.unwrap_or(tracing::Level::INFO);
         let dyn_config_path = self.dyn_config_path.unwrap_or("dynconfig.toml".into());
         let api_listen = self.api_listen.unwrap_or("127.0.0.1:5000".into());
+        let upstream_device = self.upstream_device;
         StaticConf {
             listen,
             log_level,
             dyn_config_path,
             api_listen,
+            upstream_device,
         }
     }
 }
@@ -108,6 +113,9 @@ impl OptStaticConf {
         if self.api_listen.is_none() {
             self.api_listen = other.api_listen;
         }
+        if self.upstream_device.is_none() {
+            self.upstream_device = other.upstream_device;
+        }
         self
     }
 }
@@ -123,6 +131,8 @@ pub struct StaticConf {
     pub dyn_config_path: PathBuf,
     /// Address and port for the API to listen on
     pub api_listen: String,
+    /// Name of the interface to use for upstream sockets
+    pub upstream_device: Option<String>,
 }
 
 /// Dynamic config.

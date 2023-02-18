@@ -141,4 +141,8 @@ impl<A: ServerAuthenticator, R: Router> Server<A, R> {
     pub fn notify_config_change(&self) {
         self.conn_mgr.notify_config_change()
     }
+
+    pub fn set_upstream_device(&mut self, value: Option<Vec<u8>>) {
+        self.conn_mgr.set_upstream_device(value);
+    }
 }

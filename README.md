@@ -32,6 +32,8 @@ Options:
           Path of the dynamic config [env: SOCKS_ROUTER_DYN_CONFIG_PATH=]
   -a, --api-listen <API_LISTEN>
           Address and port for the API to listen on [env: SOCKS_ROUTER_API_LISTEN=]
+  -i, --upstream-device <UPSTREAM_DEVICE>
+          Name of the interface to use for upstream sockets [env: SOCKS_ROUTER_UPSTREAM_DEVICE=]
   -h, --help
           Print help
   -V, --version
